@@ -139,6 +139,9 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     controller.apply_tree_width(eff.tree_width);
     controller.apply_tree_position(eff.tree_position);
     controller.apply_tree_max_cols(eff.tree_max_cols);
+    // Apply the same content caps the Content Renderer previews under to the whole-file copy
+    // (`C`), so a file the pane would truncate is refused by the copy rather than half-copied.
+    controller.apply_preview_caps(caps);
     // Launch open target (GH #109): CLI `--open` wins over `HERDR_FILE_VIEWER_OPEN`. Applied
     // after layout/config wiring so reveal + render see the same filters as a live session.
     // Soft-fails with an action notice; never aborts startup.

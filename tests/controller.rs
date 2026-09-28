@@ -17,7 +17,7 @@ use herdr_file_viewer::herdr::HerdrCli;
 use herdr_file_viewer::intent::Intent;
 use herdr_file_viewer::opener::{Opener, OpenerOutcome};
 use herdr_file_viewer::presenter::{Focus, PaneGeometry};
-use herdr_file_viewer::render::Renderers;
+use herdr_file_viewer::render::{Caps, Renderers};
 use herdr_file_viewer::update::spotlight_policy::{
     SpotlightCache, SpotlightInput, cache_delta, project,
 };
@@ -3926,6 +3926,144 @@ fn copy_path_strips_control_bytes_from_a_hostile_filename() {
         "the confirmation notice carries no control bytes: {:?}",
         ctrl.notices()
     );
+}
+
+// ---- copy the whole file (`C`) ---------------------------------------------------------
+
+#[test]
+fn copy_file_content_copies_the_whole_file_and_confirms() {
+    // `C`: the selected file's complete contents go to the clipboard — real tabs and the trailing
+    // newline intact — and the notice names the file and its line count. Read-only (AC-N3).
+    let dir = TempDir::new();
+    let body = "fn main() {\n\tprintln!(\"hi\");\n}\n";
+    std::fs::write(dir.path().join("a.rs"), body).unwrap();
+    let (mut ctrl, copied) = controller_with_clipboard(dir.path(), false);
+
+    let fx = ctrl.handle(Intent::CopyFileContent);
+    assert!(fx.redraw, "copying redraws to show the confirmation notice");
+    assert_eq!(
+        copied.lock().unwrap().as_slice(),
+        [body],
+        "the entire file content was copied byte-for-byte"
+    );
+    assert!(
+        ctrl.notices()
+            .iter()
+            .any(|n| n.contains("Copied a.rs (3 lines)")),
+        "the copy is confirmed with the file and its line count: {:?}",
+        ctrl.notices()
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.rs")).unwrap(),
+        body,
+        "AC-N3: the file is untouched"
+    );
+}
+
+#[test]
+fn copy_file_content_copies_the_file_not_the_displayed_render() {
+    // The content pane may show a diff / rendered markdown / a stub; `C` copies the FILE. The stub
+    // renderer here displays "stub-content" for every file — none of that may reach the clipboard.
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("notes.md"), "# Title\n\nbody\n").unwrap();
+    let (mut ctrl, copied) = controller_with_clipboard(dir.path(), false);
+    await_marker(&mut ctrl, "stub-content");
+
+    ctrl.handle(Intent::CopyFileContent);
+    assert_eq!(
+        copied.lock().unwrap().as_slice(),
+        ["# Title\n\nbody\n"],
+        "the disk content is copied, not the rendered stub"
+    );
+}
+
+#[test]
+fn copy_file_content_scrubs_control_bytes_but_keeps_tabs_and_newlines() {
+    // File bytes are untrusted (AC-16): ESC/BEL are dropped line by line so a pasted copy cannot
+    // drive a terminal, while `\t` (indentation) and the `\n` line structure survive.
+    let dir = TempDir::new();
+    std::fs::write(
+        dir.path().join("hostile.txt"),
+        "a\u{1b}[31mb\tc\u{07}\nsecond\n",
+    )
+    .unwrap();
+    let (mut ctrl, copied) = controller_with_clipboard(dir.path(), false);
+
+    ctrl.handle(Intent::CopyFileContent);
+    assert_eq!(
+        copied.lock().unwrap().as_slice(),
+        ["a[31mb\tc\nsecond\n"],
+        "control bytes stripped, tabs and newlines kept"
+    );
+}
+
+#[test]
+fn copy_file_content_on_a_directory_copies_nothing_and_says_so() {
+    let dir = TempDir::new();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    let (mut ctrl, copied) = controller_with_clipboard(dir.path(), false);
+    assert_eq!(
+        ctrl.tree().selected().unwrap().path,
+        dir.path().join("sub"),
+        "precondition: the directory is selected"
+    );
+
+    let fx = ctrl.handle(Intent::CopyFileContent);
+    assert!(fx.redraw);
+    assert!(copied.lock().unwrap().is_empty(), "nothing was copied");
+    assert!(
+        ctrl.notices()
+            .iter()
+            .any(|n| n.contains("Select a file to copy its contents")),
+        "the user is told why: {:?}",
+        ctrl.notices()
+    );
+}
+
+#[test]
+fn copy_file_content_refuses_a_binary_file() {
+    // AC-12: a binary file is never pasted as garbage; the notice says so and nothing is copied.
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("blob.bin"), b"\x00\x01\x02binary\x00").unwrap();
+    let (mut ctrl, copied) = controller_with_clipboard(dir.path(), false);
+
+    ctrl.handle(Intent::CopyFileContent);
+    assert!(copied.lock().unwrap().is_empty(), "nothing was copied");
+    assert!(
+        ctrl.notices()
+            .iter()
+            .any(|n| n.contains("Could not copy blob.bin: binary file")),
+        "{:?}",
+        ctrl.notices()
+    );
+}
+
+#[test]
+fn copy_file_content_refuses_a_file_over_the_preview_cap_instead_of_truncating() {
+    // "Copy the whole file" copies the whole file or says why not: a file the pane would show as
+    // a truncated preview is refused with a notice naming the config knobs, never half-copied.
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("big.txt"), "1\n2\n3\n4\n5\n").unwrap();
+    let (mut ctrl, copied) = controller_with_clipboard(dir.path(), false);
+    ctrl.apply_preview_caps(Caps {
+        max_lines: 3,
+        max_bytes: 64 * 1024,
+    });
+
+    ctrl.handle(Intent::CopyFileContent);
+    assert!(copied.lock().unwrap().is_empty(), "nothing was copied");
+    assert!(
+        ctrl.notices().iter().any(|n| n
+            .contains("Could not copy big.txt: file exceeds the preview cap")
+            && n.contains("preview_max_lines")),
+        "{:?}",
+        ctrl.notices()
+    );
+
+    // Under the default caps the same file copies whole.
+    ctrl.apply_preview_caps(Caps::default());
+    ctrl.handle(Intent::CopyFileContent);
+    assert_eq!(copied.lock().unwrap().as_slice(), ["1\n2\n3\n4\n5\n"]);
 }
 
 // ---- worktree picker: SwitchWorktree opens it (AC-1, AC-3, AC-4, AC-14) ----------------

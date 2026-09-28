@@ -6,7 +6,8 @@ customize it see [configuration](configuration.md).
 
 - [The tree](#the-tree)
 - [Finding a file fast](#finding-a-file-fast)
-- [Open at a known file](#open-at-a-known-file) (incl. [Teach your agent](#teach-your-agent))
+- [Open at a known file](#open-at-a-known-file) (incl. [Teach your agent](#teach-your-agent) and
+  [Click a file link](#click-a-file-link))
 - [Viewing a file](#viewing-a-file)
 - [Pinned previews](#pinned-previews)
 - [Git awareness](#git-awareness)
@@ -140,7 +141,30 @@ the binary on `PATH`: `herdr-file-viewer --open <path>[:line]`.
 ````
 
 Without that (or an equivalent skill), a vague “open it in the file viewer” is only a wish: the
-agent has no standard way to discover `--open` / `HERDR_FILE_VIEWER_OPEN`.
+agent has no standard way to discover `--open` / `HERDR_FILE_VIEWER_OPEN`. The zero-setup
+alternative is a **`file://` link**: an agent that prints `file:///abs/path/to/file.rs:42` (as an
+OSC 8 hyperlink) gives you a Ctrl+click that opens the viewer there — see
+[Click a file link](#click-a-file-link).
+
+### Click a file link
+
+When an agent (or any program) prints a **`file://` link** in a herdr pane, **Ctrl+click** it and
+the file opens in a fresh Files split beside that pane — at the line when the link names one:
+
+- `file:///home/me/repo/src/app.rs` opens the file
+- `file:///home/me/repo/src/app.rs:42` (or `…#L42`) opens it at line 42
+- `file:///home/me/repo/src/app.rs#L42-L58` jumps to line 42 and highlights the range briefly
+
+The plugin declares a herdr **link handler** for `file://` URLs, so no key or agent setup is needed
+beyond installing it. herdr detects the link (an OSC 8 hyperlink, as most tools emit) and routes the
+modified click to the plugin's `open-file-link` action instead of the system opener; the launcher
+converts the URL into the same open target as `--open` and opens a new viewer pane on it. The viewer
+roots at the clicked pane's repository (the pane's working directory, resolved to its worktree top
+level), so a path outside that repository shows a `Could not open …: outside tree root` notice.
+
+Requires **herdr 0.9.1+** (the release that routes `file://` clicks to plugin link handlers) on
+Linux, macOS, or WSL; on an older herdr, or on native Windows, the handler is inert. See
+[Summoning → Open a file link](summoning.md#open-a-file-link) for the mechanics.
 
 ### Run the binary yourself
 
@@ -352,6 +376,10 @@ root path, or trailing newline.
 
 - **Copy a path**: `y` copies the selected file's **repo-relative** path (e.g. `src/app.rs`); `Y`
   copies its **absolute** path — handy for pasting into a prompt, a command, or an agent.
+- **Copy the whole file**: `C` (Shift+`c`) copies the selected file's **entire contents** — the
+  file on disk, not the rendered view — so you can paste a complete file into a chat or an agent
+  prompt in one keystroke. Binary files are refused, and so is a file over the preview cap
+  (`preview_max_lines` / `preview_max_kib`), with a notice; it is never half-copied.
 - **Copy a line reference or content**: with the content pane focused (or zoomed), `L` enters
   **line-select mode**. `Enter` copies a repo-relative reference like `src/app.rs:42` or
   `src/app.rs:42-58`; `y`/`Y` copy the selected line content itself. A mouse click-drag selects text

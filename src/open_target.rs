@@ -55,6 +55,12 @@ pub enum CliAction {
     /// launcher scripts ask for it so the herdr split goes where `config.toml` says; reading no
     /// stdin and touching no layout, it is safe for them to call on every summon.
     PrintOpenDirection,
+    /// Convert a clicked `file://` URL into an open target (`path[:line[-end]]`), print it on one
+    /// line, then exit — the link-handler launcher's one question. `url` is the `--link-target`
+    /// value when given; absent, the binary reads herdr's `HERDR_PLUGIN_CLICKED_URL` / the
+    /// context JSON's `clicked_url` instead. A URL that is not a local file link prints nothing
+    /// and exits non-zero so the launcher opens no pane.
+    LinkTarget { url: Option<String> },
     /// Start the TUI; `open` is the raw `--open` value when present (env is layered in `app::run`).
     Run { open: Option<String> },
 }
@@ -65,11 +71,14 @@ pub enum CliAction {
 /// - unknown flags are ignored (herdr may append args we do not control)
 /// - a bare `--open` with no value is ignored (start with no open target)
 /// - `--launch-decision` / `--launch-decision-tab` win over a normal run (and over `--open`),
-///   and over `--open-direction` — a launcher asking for a decision wants the decision.
+///   and over `--open-direction` / `--link-target` — a launcher asking for a decision wants the
+///   decision.
+/// - `--link-target [url]` then wins: it is the link launcher's query, not a session; a bare
+///   `--link-target` (no value) still selects the query and reads the URL from herdr's env.
 /// - `--open-direction` otherwise wins over a normal run: it is a query, not a session.
 ///
-/// `--open` values must not look like flags (`-…`); a following `-x` is left for the next
-/// iteration so it can be ignored as unknown rather than treated as a path.
+/// `--open` / `--link-target` values must not look like flags (`-…`); a following `-x` is left
+/// for the next iteration so it can be ignored as unknown rather than treated as a value.
 pub fn parse_args<I, S>(args: I) -> CliAction
 where
     I: IntoIterator<Item = S>,
@@ -79,6 +88,7 @@ where
     let mut launch_tab = false;
     let mut launch = false;
     let mut print_direction = false;
+    let mut link_target: Option<Option<String>> = None;
     let mut args = args.into_iter().peekable();
     while let Some(arg) = args.next() {
         let arg = arg.as_ref();
@@ -112,6 +122,21 @@ where
             {
                 open_flag = Some(v.to_string());
             }
+            "--link-target" => {
+                let take = args
+                    .peek()
+                    .map(|s| {
+                        let s = s.as_ref();
+                        !s.is_empty() && !s.starts_with('-')
+                    })
+                    .unwrap_or(false);
+                let url = take.then(|| args.next().unwrap().as_ref().to_string());
+                // A bare `--link-target` still selects the query (the URL then comes from env).
+                link_target = Some(url);
+            }
+            a if let Some(v) = a.strip_prefix("--link-target=") => {
+                link_target = Some((!v.is_empty()).then(|| v.to_string()));
+            }
             _ => {
                 // Unknown: ignore (degrade-don't-die).
             }
@@ -123,6 +148,8 @@ where
         } else {
             CliAction::LaunchDecision
         }
+    } else if let Some(url) = link_target {
+        CliAction::LinkTarget { url }
     } else if print_direction {
         CliAction::PrintOpenDirection
     } else {
@@ -533,6 +560,66 @@ mod tests {
         assert_eq!(
             parse_args(["--launch-decision", "--open-direction"]),
             CliAction::LaunchDecision
+        );
+    }
+
+    #[test]
+    fn parse_args_link_target_takes_a_value_or_defers_to_env() {
+        // The link-handler launcher's query: with a value it carries the URL; bare, it still
+        // selects the query (the binary then reads HERDR_PLUGIN_CLICKED_URL), and a flag-looking
+        // follower is not eaten as the URL.
+        assert_eq!(
+            parse_args(["--link-target", "file:///w/a.rs:3"]),
+            CliAction::LinkTarget {
+                url: Some("file:///w/a.rs:3".into())
+            }
+        );
+        assert_eq!(
+            parse_args(["--link-target=file:///w/a.rs"]),
+            CliAction::LinkTarget {
+                url: Some("file:///w/a.rs".into())
+            }
+        );
+        assert_eq!(
+            parse_args(["--link-target"]),
+            CliAction::LinkTarget { url: None }
+        );
+        assert_eq!(
+            parse_args(["--link-target", "--nope"]),
+            CliAction::LinkTarget { url: None }
+        );
+        assert_eq!(
+            parse_args(["--link-target="]),
+            CliAction::LinkTarget { url: None }
+        );
+    }
+
+    #[test]
+    fn parse_args_link_target_is_a_query_below_launch_decision_above_the_rest() {
+        // A query, not a session: it outranks `--open` and `--open-direction` …
+        assert_eq!(
+            parse_args(["--open", "src/a.rs", "--link-target", "file:///w/a.rs"]),
+            CliAction::LinkTarget {
+                url: Some("file:///w/a.rs".into())
+            }
+        );
+        assert_eq!(
+            parse_args(["--open-direction", "--link-target"]),
+            CliAction::LinkTarget { url: None }
+        );
+        // … and yields to a launch decision in either order.
+        assert_eq!(
+            parse_args(["--link-target", "file:///w/a.rs", "--launch-decision"]),
+            CliAction::LaunchDecision
+        );
+        assert_eq!(
+            parse_args(["--launch-decision-tab", "--link-target"]),
+            CliAction::LaunchDecisionTab
+        );
+        // A near-miss spelling is an unknown flag: the viewer starts normally.
+        assert_eq!(
+            parse_args(["--link-targets"]),
+            CliAction::Run { open: None }
         );
     }
 

@@ -36,6 +36,7 @@ is additive and on by default.
 | `]` / `[` | Jump the tree cursor to the **next** / **previous** changed file, wrapping at the ends with a notice — step through a review one file at a time instead of arrowing past directory rows. Walks the same set the tree filters by (working-tree status while `d` is on, else the baseline-aware set behind `c` / `b`), in the order the tree lists them top-to-bottom, and expands a collapsed directory to reach a changed file inside it. It stays inside the tree you have filtered to: a changed file your current filters hide (`.`, `i`) is skipped rather than revealed, so `]` never turns a filter off behind your back. Inert outside a git repo; with nothing changed it says so |
 | `y` | Copy the selected file's **repo-relative** path to the clipboard (e.g. `src/app.rs`) |
 | `Y` | Copy the selected file's **absolute** path to the clipboard |
+| `C` (Shift+`c`) | Copy the selected file's **entire contents** to the clipboard — the file on disk, not the rendered view. Binary files are refused, and so is a file over the preview cap (`preview_max_lines` / `preview_max_kib`), with a notice; nothing is ever half-copied |
 | `a` | **Add annotation**: open the annotation editor for the selected file (`←`/`→` or `Home`/`End` move the text cursor, `Enter` saves, `Esc` cancels). Annotations live only for this viewer session and never modify the file |
 | `A` (Shift+`a`) | **Show annotations**: open the session overview; fixed keys `j`/`k` or `↑`/`↓` move, `Enter`/`e` edits, `d` deletes one, `D` (Shift+`d`) clears all immediately, `y` copies all, and `Esc`/`q` closes |
 | `Tab` | Move focus between visible regions. With a pin: tree → active preview → pinned preview → tree; when the pin is hidden for space, tree → active preview |
@@ -71,8 +72,8 @@ content scroll.)
 
 Character keys with a control modifier are normally inert, so terminal chords such as `Ctrl+C` do
 not trigger a viewer action; `Shift` is permitted for keys such as `<`, `>`, `{`, and `}` (and `a`/`A`,
-`y`/`Y`, `W`, `N`, `O`, `R`, `Z`, `?`, `H`/`L`, `J`/`K` in line-select mode, and `d`/`D` in the
-annotation overview).
+`y`/`Y`, `c`/`C`, `W`, `N`, `O`, `R`, `Z`, `?`, `H`/`L`, `J`/`K` in line-select mode, and `d`/`D` in
+the annotation overview).
 
 **On Windows only**, `Ctrl+Alt`+character (with optional `Shift`) is treated as typing (AltGr), not
 as a chord. Crossterm 0.29's Windows input path reports AltGr as the generic `Ctrl+Alt` combination,
@@ -93,6 +94,17 @@ into a prompt, a command, or an agent. The copy uses the terminal's **OSC 52** c
 it travels through herdr (and SSH) to your real clipboard with no extra tooling. A confirmation
 appears in the notices strip. If nothing lands on your clipboard, your terminal likely needs OSC 52
 / clipboard-write enabled (e.g. in tmux, `set -g set-clipboard on`).
+
+**`C` copies the whole file.** With a file selected, `C` (Shift+`c`) puts its entire contents on
+the clipboard — the bytes on disk, whatever the content pane happens to show (a diff, rendered
+markdown, or a render still in flight). It goes through the same guards as the pane: the path must
+be a regular file under the viewed root, a binary file is refused, and a file larger than the
+preview cap (`preview_max_lines` / `preview_max_kib` in the [config](configuration.md)) is refused
+with a notice naming the knob rather than silently truncated. Tabs and newlines are preserved;
+control bytes are stripped so a pasted copy can never drive your terminal. The notice reports the
+file and its line count (`Copied src/app.rs (120 lines)`). It is unavailable from a pinned preview
+(`Tab` to the tree or the active preview first), and very large payloads depend on how much your
+terminal accepts over OSC 52.
 
 ### Copy a line reference or line content (`L`)
 

@@ -1,7 +1,9 @@
 //! the herdr plugin manifest is the Host Adapter's static surface.
 //!
 //! AC-17: the viewer declares a split-pane launch of the release binary.
-//! AC-N4: the viewer never auto-launches — the manifest declares no event hooks.
+//! AC-N4: the viewer never auto-launches — the manifest declares no event hooks. Its one
+//! `[[link_handlers]]` entry is an explicit user gesture (a Ctrl+click on a `file://` link), not
+//! an automatic invocation path, and must name an action this plugin declares.
 //!
 //! Per the plan, these read `herdr-plugin.toml` to a string and assert on its contents.
 
@@ -229,8 +231,36 @@ fn declares_no_event_hooks() {
         !m.contains("[[events]]"),
         "AC-N4/AC-N6: manifest must declare no [[events]] hooks"
     );
+}
+
+#[test]
+fn declares_exactly_one_file_link_handler_naming_a_declared_action() {
+    // The `[[link_handlers]]` entry is the ONE host-initiated path into the viewer, and it fires
+    // only on an explicit user gesture (herdr's modified click on a matching URL), so it keeps
+    // AC-N4's "no automatic invocation" promise. Pin its shape against the herdr plugin docs: a
+    // Rust-regex `pattern` matched against the clicked URL, and an `action` that must name an
+    // action THIS plugin declares (herdr rejects a dangling reference). The pattern is `file://`
+    // only — never a broader scheme, so the viewer cannot hijack web links.
+    let m = manifest();
+    assert_eq!(
+        m.matches("[[link_handlers]]").count(),
+        1,
+        "exactly one link handler (the file:// one): {m}"
+    );
     assert!(
-        !m.contains("[[link_handlers]]"),
-        "manifest must declare no [[link_handlers]] (no automatic invocation path)"
+        m.contains("[[link_handlers]]\nid = \"file-link\"\ntitle = \"Open in file viewer\"\npattern = \"^file://\"\naction = \"open-file-link\""),
+        "the link handler must match `^file://` and route to the open-file-link action: {m}"
+    );
+    // The referenced action exists, runs the link launcher, and is NOT platform-gated: a handler
+    // must resolve on every platform the plugin declares, or the manifest fails to load there.
+    assert!(
+        m.contains(
+            "[[actions]]\nid = \"open-file-link\"\ntitle = \"Open file link in file viewer\""
+        ),
+        "the open-file-link action must be declared, ungated: {m}"
+    );
+    assert!(
+        m.contains("command = [\"bash\", \"scripts/open-file-link.sh\"]"),
+        "the open-file-link action must run the link launcher: {m}"
     );
 }

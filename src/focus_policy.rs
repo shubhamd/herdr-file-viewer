@@ -70,6 +70,7 @@ pub fn unavailable_from_pinned(intent: Intent) -> bool {
             | Intent::OpenInEditor
             | Intent::OpenWithApp
             | Intent::RevealInFileManager
+            | Intent::CopyFileContent
             | Intent::AddAnnotation
             | Intent::ShowAnnotations
             | Intent::CycleDiffRender
@@ -116,6 +117,8 @@ mod tests {
             Intent::OpenInEditor,
             Intent::OpenWithApp,
             Intent::RevealInFileManager,
+            // `C` re-reads the live file from disk, which a frozen pin must not stand in for.
+            Intent::CopyFileContent,
             Intent::AddAnnotation,
             Intent::ShowAnnotations,
             Intent::CycleDiffRender,

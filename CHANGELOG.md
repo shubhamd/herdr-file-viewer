@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `C` (Shift+`c`) copies the selected file's **entire contents** to the clipboard, through the same guards as the content pane: read-only, binary files refused, and a file over the `preview_max_lines` / `preview_max_kib` cap refused with a notice rather than half-copied. Remappable as `copy_file_content`. → [keys](docs/keys.md#copy-a-path-y--y) · [usage](docs/usage.md#copying-paths-and-lines)
+- Ctrl+click a `file://` link in any herdr pane to open it in the file viewer, at its line when the link names one (`file:///repo/src/app.rs:42`, `…#L42`, `…#L42-L58`). A `[[link_handlers]]` entry routes the click to a new `open-file-link` action whose launcher converts the URL through `herdr-file-viewer --link-target` and opens a fresh Files split with `HERDR_FILE_VIEWER_OPEN`. Needs herdr 0.9.1+ (the version that routes `file://` clicks to plugin link handlers); Linux/macOS/WSL. → [summoning](docs/summoning.md#open-a-file-link) · [usage](docs/usage.md#click-a-file-link)
+
 ## [1.17.0] - 2026-09-16
 
 ### Added

@@ -85,6 +85,15 @@ Outside Herdr, if the binary is on `PATH`, run it directly:
 herdr-file-viewer --open src/app.rs:42
 ```
 
+## Offer a clickable link instead
+
+When you mention a file location in your reply rather than opening it, you can print it as a
+`file://` link with an absolute path and optional line anchor, for example
+`file:///home/me/repo/src/app.rs:42` or `file:///home/me/repo/src/app.rs#L42-L58`, emitted as an
+OSC 8 hyperlink when your output supports it. On herdr 0.9.1 or newer the user can Ctrl+click it
+and the plugin's link handler opens the file viewer at that location; you launch nothing. Use the
+absolute path of the file inside the repository the user's pane is in, never a relative one.
+
 ## Conversation behavior
 
 When the user directly asks to see a location, open it after resolving the target. When you have

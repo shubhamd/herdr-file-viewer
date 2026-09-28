@@ -1,6 +1,6 @@
 //! Host Adapter: parse the injected launch context (AC-26).
 
-use herdr_file_viewer::host::{from_env, parse_context};
+use herdr_file_viewer::host::{from_env, parse_clicked_url, parse_context};
 use std::path::PathBuf;
 
 #[test]
@@ -107,6 +107,29 @@ fn empty_workspace_id_is_treated_as_none() {
     let json = r#"{"cwd":"/w","workspace_id":""}"#;
     let ctx = parse_context(Some(json), PathBuf::from("/fallback"));
     assert_eq!(ctx.workspace_id, None);
+}
+
+// clicked_url parsing (the link-handler invocation context)
+
+#[test]
+fn clicked_url_is_parsed_from_a_link_click_context() {
+    // herdr's link-handler invocation carries the clicked URL alongside the usual fields.
+    let json = r#"{"focused_pane_cwd":"/w","invocation_source":"link_click","clicked_url":"file:///w/src/app.rs:42","link_handler_id":"file-link"}"#;
+    assert_eq!(
+        parse_clicked_url(Some(json)),
+        Some("file:///w/src/app.rs:42".to_string())
+    );
+    // The launch context itself is unaffected by the extra fields.
+    let ctx = parse_context(Some(json), PathBuf::from("/fallback"));
+    assert_eq!(ctx.cwd, PathBuf::from("/w"));
+}
+
+#[test]
+fn clicked_url_is_none_outside_a_link_click() {
+    assert_eq!(parse_clicked_url(Some(r#"{"cwd":"/w"}"#)), None);
+    assert_eq!(parse_clicked_url(Some(r#"{"clicked_url":"  "}"#)), None);
+    assert_eq!(parse_clicked_url(Some("{ not json")), None);
+    assert_eq!(parse_clicked_url(None), None);
 }
 
 #[test]

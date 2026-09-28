@@ -357,6 +357,13 @@ pub(crate) const REGISTRY: &[Binding] = &[
         category: "Open & copy",
     },
     Binding {
+        intent: Intent::CopyFileContent,
+        name: "copy_file_content",
+        default_keys: &[KeyCode::Char('C')],
+        description: "Copy the selected file's entire contents to the clipboard.",
+        category: "Open & copy",
+    },
+    Binding {
         intent: Intent::AddAnnotation,
         name: "add_annotation",
         default_keys: &[KeyCode::Char('a')],
@@ -847,6 +854,7 @@ mod tests {
         (KeyCode::Char('R'), Intent::RevealInFileManager),
         (KeyCode::Char('y'), Intent::CopyRepoPath),
         (KeyCode::Char('Y'), Intent::CopyAbsPath),
+        (KeyCode::Char('C'), Intent::CopyFileContent),
         (KeyCode::Char('a'), Intent::AddAnnotation),
         (KeyCode::Char('A'), Intent::ShowAnnotations),
         (KeyCode::Char('W'), Intent::SwitchWorktree),
@@ -1437,6 +1445,29 @@ mod tests {
         );
         assert_eq!(
             map_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL)),
+            None
+        );
+    }
+
+    #[test]
+    fn capital_c_copies_the_whole_file_and_lowercase_c_stays_changed_only() {
+        // `C` (Shift+c, reported as `Char('C')` with the Shift bit set) copies the selected file's
+        // entire contents; plain `c` is untouched (changed-only filter), and a Ctrl chord on the
+        // same key fires neither, so the terminal interrupt stays clear.
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT)),
+            Some(Intent::CopyFileContent)
+        );
+        assert_eq!(
+            map_key(k(KeyCode::Char('C'))),
+            Some(Intent::CopyFileContent)
+        );
+        assert_eq!(
+            map_key(k(KeyCode::Char('c'))),
+            Some(Intent::ToggleChangedOnly)
+        );
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
             None
         );
     }

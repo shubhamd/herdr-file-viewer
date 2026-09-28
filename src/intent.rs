@@ -74,6 +74,10 @@ pub enum Intent {
     /// Copy the selected node's **absolute** path to the clipboard. Read-only, like
     /// [`Intent::CopyRepoPath`] — no file contents are touched.
     CopyAbsPath,
+    /// Copy the selected **file's entire contents** to the clipboard (`C`). A bounded, read-only
+    /// disk read through the same guards the content pane uses (binary refused, size-capped,
+    /// root-contained); the file is never written (AC-N3). Inert on a directory / empty tree.
+    CopyFileContent,
     /// Open the annotation editor for the selected file. Saving changes session-only in-memory
     /// annotation state; it never writes a file or mutates git.
     AddAnnotation,
@@ -172,7 +176,7 @@ pub enum Intent {
 impl Intent {
     /// Every intent variant — lets the dispatcher and tests enumerate the closed set so
     /// keyboard-completeness (AC-18) and the no-file/git-mutation invariant (AC-N3) stay checkable.
-    pub const ALL: [Intent; 44] = [
+    pub const ALL: [Intent; 45] = [
         Intent::NavUp,
         Intent::NavDown,
         Intent::PageUp,
@@ -193,6 +197,7 @@ impl Intent {
         Intent::RevealInFileManager,
         Intent::CopyRepoPath,
         Intent::CopyAbsPath,
+        Intent::CopyFileContent,
         Intent::AddAnnotation,
         Intent::ShowAnnotations,
         Intent::ToggleFocus,
@@ -253,6 +258,7 @@ mod tests {
                 | Intent::RevealInFileManager
                 | Intent::CopyRepoPath
                 | Intent::CopyAbsPath
+                | Intent::CopyFileContent
                 | Intent::ShowAnnotations
                 | Intent::ToggleFocus
                 | Intent::ShrinkTree
@@ -348,11 +354,19 @@ mod tests {
     }
 
     #[test]
-    fn all_length_is_44() {
+    fn all_length_is_45() {
         assert_eq!(
             Intent::ALL.len(),
-            44,
-            "Intent::ALL must have exactly 44 variants"
+            45,
+            "Intent::ALL must have exactly 45 variants"
+        );
+    }
+
+    #[test]
+    fn copy_file_content_is_in_all() {
+        assert!(
+            Intent::ALL.contains(&Intent::CopyFileContent),
+            "Intent::ALL must contain CopyFileContent"
         );
     }
 
