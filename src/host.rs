@@ -21,6 +21,27 @@ struct RawContext {
     cwd: Option<String>,
     base_branch: Option<String>,
     workspace_id: Option<String>,
+    /// Set by herdr on a link-handler invocation (`invocation_source = "link_click"`): the URL the
+    /// user Ctrl-clicked. Read only by the `--link-target` query, never by the TUI launch path.
+    clicked_url: Option<String>,
+}
+
+/// The clicked URL a herdr link-handler invocation carries in `HERDR_PLUGIN_CONTEXT_JSON`
+/// (`clicked_url`), or `None` when the context is absent, malformed, or not a link click. Never
+/// panics (AC-26). The env-var form (`HERDR_PLUGIN_CLICKED_URL`) is the launcher's first choice;
+/// this is the fallback for a herdr that sets only the JSON.
+pub fn clicked_url_from_env() -> Option<String> {
+    let json = std::env::var("HERDR_PLUGIN_CONTEXT_JSON").ok();
+    parse_clicked_url(json.as_deref())
+}
+
+/// Pure parser behind [`clicked_url_from_env`]: the `clicked_url` field of the context JSON, with
+/// an empty string treated as absent.
+pub fn parse_clicked_url(json: Option<&str>) -> Option<String> {
+    let raw: RawContext = json
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    raw.clicked_url.filter(|s| !s.trim().is_empty())
 }
 
 /// Build a `LaunchContext` from the process environment: the injected context JSON, falling

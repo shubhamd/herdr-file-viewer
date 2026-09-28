@@ -1,8 +1,10 @@
 # herdr-plugin.toml — manifest for the herdr-file-viewer plugin.
 #
 # A git-aware, read-only file viewer that herdr opens in a split pane beside the
-# user's current work. The viewer appears ONLY in response to an explicit action
-# (its keybinding) — there are no event hooks and no automatic invocation (AC-N4).
+# user's current work. The viewer appears ONLY in response to an explicit user action
+# (its keybinding, or a Ctrl+click on a `file://` link) — there are no event hooks and
+# no automatic invocation (AC-N4). The one [[link_handlers]] entry below is such a
+# gesture: herdr runs the named action only when the user modifier-clicks a matching link.
 #
 # Windows support is preview (see README's Windows section). Cross-platform packaging:
 #  - [[build]] has a unix (/bin/sh) and a Windows (PowerShell) entry, each gated by the
@@ -97,3 +99,26 @@ command = [
   "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
   '''$u=New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding=$u; $OutputEncoding=$u; $b=$env:HERDR_BIN_PATH; if(-not $b){$b='herdr'}; $p=((& $b plugin list --json|ConvertFrom-Json).result.plugins|?{$_.plugin_id -eq 'herdr-file-viewer'}).plugin_root; if($p -and $p.StartsWith('\\?\')){$p=$p.Substring(4)}; & (Join-Path (Join-Path $p 'scripts') 'open-file-viewer-tab.ps1')''',
 ]
+
+# The action behind the link handler below: open a Ctrl-clicked `file://` link in a fresh Files
+# split, at its line when the link names one (`file:///repo/src/app.rs:42`, `…#L42`). The launcher
+# converts the URL through the viewer binary (`--link-target`) and passes the result as the
+# HERDR_FILE_VIEWER_OPEN launch open target. Not platform-gated: a link handler must name an action
+# the plugin declares on EVERY platform, and this bash launcher is the Linux/macOS/WSL path (native
+# Windows preview has no open-target launcher yet, so the click is a no-op there).
+[[actions]]
+id = "open-file-link"
+title = "Open file link in file viewer"
+description = "Open a Ctrl-clicked file:// link in the file viewer, at its line when the link names one."
+command = ["bash", "scripts/open-file-link.sh"]
+
+# Route a modifier-click on a `file://` link in any pane to the action above. The pattern is a Rust
+# regex herdr matches against the clicked URL; the action must be one this plugin declares
+# (verified against the herdr 0.7+ plugin docs). Clicking a `file://` link reaches plugin link
+# handlers from herdr 0.9.1 (its 0.9.1 changelog: "Plugin link handlers now receive matching OSC 8
+# `file://` clicks"); on an older herdr the entry is inert.
+[[link_handlers]]
+id = "file-link"
+title = "Open in file viewer"
+pattern = "^file://"
+action = "open-file-link"

@@ -115,7 +115,12 @@ These shape every decision; violating one is a design error, not a style nit:
   (Windows is preview, with per-item launcher entries), and **platform-gated `[[build]]` steps**
   (`["/bin/sh","scripts/fetch-or-build.sh"]` on unix, `powershell … scripts/fetch-or-build.ps1` on
   Windows) that download the verified prebuilt binary and fall back to `cargo build --release`.
-  **No `[[events]]`** (AC-N4).
+  **No `[[events]]`** (AC-N4). The one **`[[link_handlers]]`** entry (`pattern = "^file://"` →
+  the `open-file-link` action, `scripts/open-file-link.sh`) is NOT an event hook: herdr runs it
+  only on the user's explicit Ctrl+click of a matching link (herdr 0.9.1+ routes `file://`
+  clicks to plugins), so the "explicit action only" promise holds. Its `action` must name an
+  action the plugin declares on every platform, so that action is deliberately not
+  platform-gated. `tests/manifest.rs` pins this shape.
 - **Runtime host ops** via the herdr CLI (`$HERDR_BIN_PATH`, the `HerdrCli::run` / `run_json` seam in
   `src/herdr.rs`): read-only layout/query commands only — e.g. `pane zoom` (the `Z` full-screen), the
   worktree picker's queries, and the tab/split launcher scripts. The **editor hand-off is NOT a herdr

@@ -25,6 +25,8 @@ const AGENT_SKILL: &str = include_str!("../skills/herdr-file-viewer/SKILL.md");
 const OPEN_PANE_SCRIPT: &str = include_str!("../scripts/open-file-viewer.sh");
 const OPEN_PANE_PS1: &str = include_str!("../scripts/open-file-viewer.ps1");
 const OPEN_TAB_SCRIPT: &str = include_str!("../scripts/open-file-viewer-tab.sh");
+const OPEN_LINK_SCRIPT: &str = include_str!("../scripts/open-file-link.sh");
+const SUMMONING_DOC: &str = include_str!("../docs/summoning.md");
 
 /// The `--cwd` drift guard (#139).
 ///
@@ -63,6 +65,7 @@ fn no_documented_launch_passes_cwd_to_plugin_pane_open() {
         ("docs/usage.md", USAGE_DOC),
         ("scripts/open-file-viewer.sh", OPEN_PANE_SCRIPT),
         ("scripts/open-file-viewer-tab.sh", OPEN_TAB_SCRIPT),
+        ("scripts/open-file-link.sh", OPEN_LINK_SCRIPT),
     ] {
         for block in launch_blocks(doc) {
             assert!(
@@ -91,6 +94,7 @@ fn split_launchers_do_not_hardcode_direction_and_tab_has_none() {
     for (name, script) in [
         ("scripts/open-file-viewer.sh", OPEN_PANE_SCRIPT),
         ("scripts/open-file-viewer.ps1", OPEN_PANE_PS1),
+        ("scripts/open-file-link.sh", OPEN_LINK_SCRIPT),
     ] {
         for hardcoded in ["--direction right", "'--direction', 'right'"] {
             assert!(
@@ -240,6 +244,39 @@ fn configuration_doc_points_to_the_config_example_template() {
     assert!(
         CONFIG_DOC.contains("config.toml") && CONFIG_DOC.to_lowercase().contains("rename"),
         "docs/configuration.md must tell users to rename the copy to config.toml"
+    );
+}
+
+/// The file:// link handler is a user-facing surface with a host-version requirement, so the docs
+/// must carry it: how to click (the modifier), where it opens, the herdr version that routes
+/// `file://` clicks to plugins, and the agent-facing hint that emits such links. The launcher must
+/// pass the target as a single `--env` value (data, not interpolated shell text).
+#[test]
+fn file_link_handler_is_documented_and_the_launcher_passes_the_target_as_env() {
+    for (name, doc) in [
+        ("docs/summoning.md", SUMMONING_DOC),
+        ("docs/usage.md", USAGE_DOC),
+    ] {
+        for phrase in ["file://", "Ctrl", "0.9.1"] {
+            assert!(
+                doc.contains(phrase),
+                "{name} must document the file:// link handler detail: {phrase:?}"
+            );
+        }
+    }
+    assert!(
+        AGENT_SKILL.contains("file://"),
+        "the agent skill must tell agents they can emit file:// links"
+    );
+    assert!(
+        OPEN_LINK_SCRIPT.contains("--link-target")
+            && OPEN_LINK_SCRIPT.contains("--env \"HERDR_FILE_VIEWER_OPEN=$target\""),
+        "the link launcher must resolve the target through the binary and pass it as one --env value"
+    );
+    let released = section(CHANGELOG, "## [Unreleased]", "\n## [");
+    assert!(
+        released.contains("file://") && released.contains("`C`"),
+        "CHANGELOG.md's Unreleased section must carry the link handler and the `C` copy key"
     );
 }
 

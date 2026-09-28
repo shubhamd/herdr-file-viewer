@@ -28,6 +28,31 @@ fn main() -> std::io::Result<()> {
             println!("{}", eff.open_direction.label());
             Ok(())
         }
+        CliAction::LinkTarget { url } => {
+            // The link-handler launcher's one question: which open target does this clicked
+            // `file://` URL name? Resolved here rather than in bash so percent-decoding, the
+            // local-host check and the `#L42` / `:42` anchor conventions live in the one tested
+            // place. URL precedence: the flag value, then herdr's HERDR_PLUGIN_CLICKED_URL, then the
+            // context JSON's `clicked_url`. A URL that is not a local file link prints nothing and
+            // exits non-zero, so the launcher opens no pane for it.
+            let url = url
+                .or_else(|| {
+                    std::env::var(herdr_file_viewer::link_target::CLICKED_URL_ENV)
+                        .ok()
+                        .filter(|s| !s.trim().is_empty())
+                })
+                .or_else(herdr_file_viewer::host::clicked_url_from_env);
+            match url
+                .as_deref()
+                .and_then(herdr_file_viewer::link_target::file_url_to_open_target)
+            {
+                Some(target) => {
+                    println!("{}", target.display_ref());
+                    Ok(())
+                }
+                None => std::process::exit(1),
+            }
+        }
         CliAction::Run { open } => herdr_file_viewer::run(open),
     }
 }

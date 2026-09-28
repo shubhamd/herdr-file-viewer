@@ -56,7 +56,7 @@ fn strip_line_gutter(plain: &str, n: usize) -> &str {
 /// indentation survives the AC-16 scrub. The per-line counterpart of
 /// [`crate::text_layout::sanitize_control`] (which would also eat tabs and newlines); callers
 /// join lines with `\n` AFTER filtering so line structure survives.
-fn filter_control_keep_tabs(s: &str) -> String {
+pub(super) fn filter_control_keep_tabs(s: &str) -> String {
     s.chars()
         .filter(|c| !c.is_control() || *c == '\t')
         .collect()

@@ -870,6 +870,11 @@ pub struct Controller {
     /// The external renderer commands for independently rendering Help's What's New documents.
     /// Built from `Components::renderers` at construction; `None` ⇒ fallback.
     renderers: Renderers,
+    /// The content size caps (`preview_max_lines` / `preview_max_kib`) the whole-file copy (`C`)
+    /// bounds its disk read with — the same values the Content Renderer previews under, so a file
+    /// the pane would truncate is refused rather than half-copied. Defaults to the built-in caps;
+    /// `app::run` wires the configured ones via [`apply_preview_caps`](Self::apply_preview_caps).
+    caps: crate::render::Caps,
     /// Render dispatch to the worker thread (AC-23). `latest_seq` is the most recently
     /// dispatched job; a `poll`ed result with a smaller seq is stale and dropped.
     job_tx: mpsc::Sender<RenderJob>,
@@ -1083,6 +1088,7 @@ impl Controller {
             clipboard,
             providers,
             renderers,
+            caps: crate::render::Caps::default(),
             job_tx,
             result_rx,
             latest_seq: 0,
@@ -1645,6 +1651,13 @@ impl Controller {
         self.tree.set_compact_dirs(on);
     }
 
+    /// Apply the configured content caps (`preview_max_lines` / `preview_max_kib`) the whole-file
+    /// copy (`C`) bounds its read with. The Content Renderer receives the same value through its
+    /// own factory, so the pane and the copy agree on what "too large" means. Startup wiring only.
+    pub fn apply_preview_caps(&mut self, caps: crate::render::Caps) {
+        self.caps = caps;
+    }
+
     /// Apply a launch **open target** once at startup: resolve `path` under the tree **root**,
     /// **reveal in tree**, dispatch a render, and (when a line is set) queue a **go to line** via
     /// [`pending_goto`](Self::pending_goto) after forcing the source-mapped view when needed.
@@ -2189,6 +2202,7 @@ impl Controller {
             Intent::RevealInFileManager => self.reveal_in_file_manager(),
             Intent::CopyRepoPath => self.copy_path(PathKind::Repo),
             Intent::CopyAbsPath => self.copy_path(PathKind::Absolute),
+            Intent::CopyFileContent => self.copy_file_content(),
             Intent::AddAnnotation => self.add_annotation(),
             Intent::ShowAnnotations => self.show_annotations(),
             Intent::ToggleFocus => self.toggle_focus(),
@@ -2935,6 +2949,73 @@ impl Controller {
         self.action_notice = Some(match self.clipboard.copy(&text) {
             Ok(()) => format!("Copied {text}"),
             Err(e) => format!("Could not copy path: {e}"),
+        });
+        Effects::redraw()
+    }
+
+    /// Copy the selected **file's entire contents** to the clipboard (`C`).
+    ///
+    /// The bytes come from a fresh, bounded disk read through [`crate::render::classify`] — the
+    /// SAME guards the content pane applies: a path must resolve to a regular file inside the root
+    /// (AC-N5), a binary file is refused rather than pasted as garbage (AC-12), and the read is
+    /// capped at the configured preview caps (AC-N1). A file past the cap is refused with a notice
+    /// naming the knob, never silently truncated: "copy the whole file" must copy the whole file or
+    /// say why it did not. The displayed render is deliberately NOT the source (it may be a diff, a
+    /// rendered-markdown view, or a stale in-flight render); the file is.
+    ///
+    /// Untrusted file bytes reach the clipboard, so each line is scrubbed of control characters
+    /// (keeping `\t`) exactly as the line-select copy does (AC-16), then re-joined with `\n`; a
+    /// trailing newline survives. Read-only: the file is never written (AC-N3). Inert with no
+    /// selection; a directory shows a short notice instead of copying nothing.
+    fn copy_file_content(&mut self) -> Effects {
+        let Some(node) = self.tree.selected() else {
+            return Effects::noop();
+        };
+        if node.kind != NodeKind::File {
+            self.action_notice = Some("Select a file to copy its contents".into());
+            return Effects::redraw();
+        }
+        let path = node.path.clone();
+        let label = crate::text_layout::sanitize_control(
+            &self
+                .rel(&path)
+                .unwrap_or_else(|| path.clone())
+                .to_string_lossy(),
+        );
+        let text = match crate::render::classify(&self.root, &path, self.caps) {
+            crate::render::Prepared::Full { text } => text,
+            crate::render::Prepared::Truncated { .. } => {
+                self.action_notice = Some(format!(
+                    "Could not copy {label}: file exceeds the preview cap (raise preview_max_lines / preview_max_kib)"
+                ));
+                return Effects::redraw();
+            }
+            crate::render::Prepared::Binary => {
+                self.action_notice = Some(format!("Could not copy {label}: binary file"));
+                return Effects::redraw();
+            }
+            crate::render::Prepared::Unavailable { reason } => {
+                self.action_notice = Some(format!("Could not copy {label}: {}", reason.label()));
+                return Effects::redraw();
+            }
+        };
+        // Per-line scrub (keeping tabs), then re-join, so line structure survives the AC-16 filter
+        // that a whole-string `sanitize_control` would flatten.
+        let line_count = text.lines().count();
+        let mut scrubbed = text
+            .lines()
+            .map(lineselect::filter_control_keep_tabs)
+            .collect::<Vec<_>>()
+            .join("\n");
+        if text.ends_with('\n') {
+            scrubbed.push('\n');
+        }
+        self.action_notice = Some(match self.clipboard.copy(&scrubbed) {
+            Ok(()) => {
+                let unit = if line_count == 1 { "line" } else { "lines" };
+                format!("Copied {label} ({line_count} {unit})")
+            }
+            Err(e) => format!("Could not copy {label}: {e}"),
         });
         Effects::redraw()
     }

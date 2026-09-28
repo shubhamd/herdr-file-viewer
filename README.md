@@ -38,8 +38,9 @@ back into the chat. It never touches your files.
 - **Pin one file, keep browsing.** `p` freezes it on the right. Switch worktree (`W`) and compare
   it with another checkout, or pin the old version and walk the new one.
 - **Agents show you the spot. You send notes back.** Teach them the [bundled skill](skills/herdr-file-viewer/SKILL.md)
-  and "open `src/app.rs:42` in Files" lands you there. Mark a file or a range (`a`), copy the
-  notes (`A` then `y`), paste them into the chat.
+  and "open `src/app.rs:42` in Files" lands you there, or just Ctrl+click a `file://` link an agent
+  prints (herdr 0.9.1+). Mark a file or a range (`a`), copy the notes (`A` then `y`) or the whole
+  file (`C`), paste them into the chat.
 - **Edit in *your* editor.** `e` suspends the viewer and opens the file in neovim, vim, micro, or
   whatever you set as `editor` (else `$EDITOR`). You change the file there; the viewer never writes
   it, and comes back when you quit the editor.
@@ -62,6 +63,7 @@ A taste of what the keys do — the [full key & mouse reference](docs/keys.md) h
 | `b` | Flip the diff baseline: your branch's merge-base ⇄ `HEAD` |
 | `W` | Switch to another git worktree, in place |
 | `L` | Copy a `path:line` reference (or the selected lines) |
+| `C` | Copy the whole file to the clipboard |
 | `Z` | Full-screen the current file |
 | `e` / `O` / `R` | Hand off: editor / OS default app / file manager |
 | `?` | Help overlay: What's New, keys, settings, about |
